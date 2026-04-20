@@ -1,5 +1,6 @@
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, field_validator
+import re
 from typing import Optional
 from datetime import date, datetime
 from app.database import get_connection
@@ -16,8 +17,23 @@ class BookingRequest(BaseModel):
     num_infants: int = 0
     guest_name: str
     guest_email: EmailStr
-    guest_phone: Optional[str] = None
+    guest_phone: str
     special_requests: Optional[str] = None
+
+    @field_validator('guest_name')
+    @classmethod
+    def name_must_be_letters(cls, v):
+        if not re.match(r'^[a-zA-Z\s]+$', v.strip()):
+            raise ValueError('Name can only contain letters')
+        return v.strip().title()
+
+    @field_validator('guest_phone')
+    @classmethod
+    def phone_must_be_10_digits(cls, v):
+        digits = re.sub(r'\D', '', v)
+        if len(digits) != 10:
+            raise ValueError('Phone number must be exactly 10 digits')
+        return digits
 
 
 def generate_booking_ref(conn) -> str:
