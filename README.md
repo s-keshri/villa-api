@@ -1,9 +1,9 @@
 # AureoStays — Full-Stack Villa Booking Platform with Live ETL Pipeline
 
-A production-grade villa booking platform built as a **data engineering portfolio project**. Every guest interaction like browsing properties, selecting dates, entering details, confirming a booking, flows through a real ETL pipeline into a structured PostgreSQL database that is queryable in real time.
+A production-grade villa booking platform built as a **data engineering portfolio project**. Every guest interaction like browsing properties, selecting dates, entering details, confirming a booking flows through a real ETL pipeline into a structured PostgreSQL database that is queryable in real time.
 
 **Live Site**: [villa-frontend.vercel.app](https://villa-frontend.vercel.app)  
-**Live API**: [villa-api-production-f7b1.up.railway.app](https://villa-api-production-f7b1.up.railway.app/docs)  
+**Live API**: [villa-api-production-f7b1.up.railway.app/docs](https://villa-api-production-f7b1.up.railway.app/docs)
 
 ---
 
@@ -13,6 +13,7 @@ Most data engineering portfolios show pipelines built on CSV files and Jupyter n
 
 - A guest visits the live website, selects a villa, picks dates, and books
 - That interaction creates clean, structured records across 4 PostgreSQL tables
+- The guest instantly receives a **branded HTML confirmation email** with full booking details
 - The data is immediately queryable via SQL — revenue, occupancy, guest analytics
 - The pipeline handles edge cases: double-booking prevention, atomic transactions, price snapshotting
 
@@ -26,7 +27,7 @@ Most data engineering portfolios show pipelines built on CSV files and Jupyter n
 │              villa-frontend.vercel.app                      │
 │         Next.js 15 + Tailwind CSS + TypeScript              │
 └─────────────────────┬───────────────────────────────────────┘
-                      │  HTTP POST /bookings/
+                      │  HTTPS POST /bookings/
                       ▼
 ┌─────────────────────────────────────────────────────────────┐
 │                      BACKEND API                            │
@@ -37,17 +38,21 @@ Most data engineering portfolios show pipelines built on CSV files and Jupyter n
 │  • Upserts guest record                                     │
 │  • Creates booking with atomic transaction                  │
 │  • Blocks inventory dates                                   │
-└─────────────────────┬───────────────────────────────────────┘
-                      │  PostgreSQL (asyncpg)
-                      ▼
-┌─────────────────────────────────────────────────────────────┐
-│                     DATABASE                                │
-│              Supabase (PostgreSQL 15)                       │
-│                                                             │
-│  properties │ inventory │ guests │ bookings                 │
-└─────────────────────┬───────────────────────────────────────┘
-                      │  SQL queries
-                      ▼
+│  • Sends HTML confirmation email via Resend                 │
+└──────────┬──────────────────────────┬───────────────────────┘
+           │  PostgreSQL (asyncpg)    │  Resend API
+           ▼                          ▼
+┌─────────────────────┐   ┌──────────────────────────────────┐
+│      DATABASE       │   │         GUEST'S INBOX            │
+│  Supabase (PG 15)   │   │   Branded HTML email with:       │
+│                     │   │   • Booking reference            │
+│  properties         │   │   • Property & location          │
+│  inventory          │   │   • Check-in / Check-out dates   │
+│  guests             │   │   • Total amount in ₹            │
+│  bookings           │   │   • Special requests             │
+└─────────┬───────────┘   └──────────────────────────────────┘
+          │  SQL queries
+          ▼
 ┌─────────────────────────────────────────────────────────────┐
 │                    ANALYTICS                                │
 │                  Metabase / Redash                          │
@@ -63,16 +68,29 @@ Most data engineering portfolios show pipelines built on CSV files and Jupyter n
 
 ## Tech Stack
 
-| Layer | Technology |
-|---|---|
-| Frontend | Next.js 15, Tailwind CSS, TypeScript |
-| Backend | FastAPI, Python 3.13, Pydantic v2 |
-| Database | PostgreSQL 15 (Supabase) |
-| ORM / Driver | asyncpg (raw async SQL) |
-| Frontend Hosting | Vercel |
-| API Hosting | Railway |
-| Analytics | Metabase |
-| Email | Resend | Transactional email API |
+| Layer | Technology | Notes |
+|---|---|---|
+| Frontend | Next.js 15, Tailwind CSS, TypeScript | Deployed on Vercel |
+| Backend | FastAPI, Python 3.13, Pydantic v2 | Deployed on Railway |
+| Database | PostgreSQL 15, asyncpg | Hosted on Supabase |
+| Email | Resend | Transactional HTML emails |
+| Analytics | Metabase | Connected to live Supabase DB |
+
+---
+
+## Confirmation Email
+
+Every confirmed booking automatically triggers a branded HTML email to the guest containing:
+
+- AureoStays branding with dark/amber theme
+- Unique booking reference in a highlighted box
+- Full booking details — property, location, check-in, check-out, duration, guests, special requests
+- Total amount in Indian Rupees
+- Check-in instructions note
+
+Built with **Resend** — fires automatically after every successful booking transaction.
+
+> Note: Currently using Resend's sandbox mode which delivers to the registered address only. Production deployment would use a verified custom domain to send to all guests.
 
 ---
 
@@ -107,23 +125,22 @@ UNIQUE (property_id, date)  -- on inventory table
 
 ## The ETL Pipeline in Detail
 
-When a guest clicks **Confirm Booking**, a single API call triggers this sequence — all inside one database transaction:
+When a guest clicks **Confirm Booking**, a single API call triggers this sequence:
 
 ```
-1. Validate property slug exists
-2. Check guest count ≤ property max_guests
-3. Query inventory → confirm all dates are available
-4. Upsert guest record (INSERT ... ON CONFLICT DO NOTHING)
-5. Generate booking reference (BK-YYYYMMDD-XXXX)
-6. INSERT booking row with snapshotted price
-7. UPDATE inventory → set is_available = FALSE for all booked dates
-8. COMMIT
-9. Send HTML confirmation email to guest via Resend
+1.  Validate property slug exists
+2.  Check guest count ≤ property max_guests
+3.  Query inventory → confirm all dates are available
+4.  Upsert guest record (INSERT ... ON CONFLICT DO UPDATE)
+5.  Generate booking reference (BK-YYYYMMDD-XXXX)
+6.  INSERT booking row with snapshotted price
+7.  UPDATE inventory → set is_available = FALSE for all booked dates
+8.  COMMIT — steps 4–7 are one atomic transaction
+9.  Send branded HTML confirmation email via Resend
 
-If any step fails → ROLLBACK (no partial writes)
+If any step from 4–7 fails → ROLLBACK (no partial writes, no orphaned records)
+Email failure (step 9) never affects the booking — it is non-blocking
 ```
-
-This atomic transaction pattern is what makes the pipeline reliable. No double bookings. No orphaned records.
 
 ---
 
@@ -135,10 +152,10 @@ This atomic transaction pattern is what makes the pipeline reliable. No double b
 | GET | `/properties` | List all active villas |
 | GET | `/properties/{slug}` | Get one villa's details |
 | GET | `/properties/{slug}/availability` | Check date availability |
-| POST | `/bookings/` | Create a booking (full ETL) |
+| POST | `/bookings/` | Create a booking (full ETL + email) |
 | GET | `/bookings` | Admin — all bookings with guest & property data |
 
-Full interactive docs available at: `/docs` (Swagger UI)
+Full interactive docs: [villa-api-production-f7b1.up.railway.app/docs](https://villa-api-production-f7b1.up.railway.app/docs)
 
 ---
 
@@ -171,7 +188,7 @@ SELECT
     p.name AS property_name,
     COUNT(b.id) AS total_bookings,
     SUM(b.total_amount) AS total_revenue,
-    AVG(b.total_amount) AS avg_booking_value
+    ROUND(AVG(b.total_amount), 2) AS avg_booking_value
 FROM bookings b
 JOIN properties p ON b.property_id = p.id
 WHERE b.status = 'confirmed'
@@ -196,7 +213,7 @@ ORDER BY occupancy_pct DESC;
 
 ## Running Locally
 
-**Prerequisites:** Python 3.10+, Node.js 18+, a Supabase project
+**Prerequisites:** Python 3.10+, Node.js 18+, a Supabase project, a Resend account
 
 **Backend:**
 ```bash
@@ -204,7 +221,7 @@ git clone https://github.com/s-keshri/villa-api.git
 cd villa-api
 pip install -r requirements.txt
 cp .env.example .env
-# Add your Supabase connection string to .env
+# Add your Supabase connection string and Resend API key to .env
 uvicorn app.main:app --reload
 # API running at http://localhost:8000
 ```
@@ -229,21 +246,21 @@ Run `schema.sql` in your Supabase SQL Editor. This creates all 4 tables, indexes
 ```
 villa-api/
 ├── app/
-│   ├── main.py          # FastAPI app, CORS config
-│   ├── database.py      # asyncpg connection pool
+│   ├── main.py           # FastAPI app, CORS config
+│   ├── database.py       # asyncpg connection pool
 │   └── routers/
-│       ├── properties.py  # GET /properties endpoints
-│       └── bookings.py    # POST /bookings/ — the ETL core
-├── Procfile             # Railway start command
+│       ├── properties.py # GET /properties endpoints
+│       └── bookings.py   # POST /bookings/ — ETL core + email
+├── Procfile              # Railway start command
 ├── requirements.txt
 └── .env.example
 
 villa-frontend/
 ├── app/
-│   ├── page.tsx                        # Listing page
+│   ├── page.tsx                     # Listing page
 │   └── properties/[slug]/
-│       ├── page.tsx                    # Detail page
-│       └── BookingWidget.tsx           # Date picker + guest form + API call
+│       ├── page.tsx                 # Detail page
+│       └── BookingWidget.tsx        # Date picker + guest form + API call
 └── ...
 ```
 
@@ -259,6 +276,8 @@ villa-frontend/
 
 **Why generated columns?** `num_nights`, `total_guests`, and `total_amount` are always consistent because Postgres computes them — not the application layer. Metabase queries never need to recalculate them.
 
+**Why is email non-blocking?** The confirmation email fires after the transaction commits. If Resend is down, the booking still succeeds — the guest's data is safe. Email delivery is a notification layer, not part of the core transaction.
+
 ---
 
 ## What's Next
@@ -266,8 +285,9 @@ villa-frontend/
 - Deploy Metabase to Render for a publicly shareable analytics dashboard
 - Add a `/dashboard` page to the frontend showing live booking analytics
 - Migrate API from Railway to Render when trial ends (free forever)
+- Verify a custom domain on Resend to send confirmation emails to all guests
 - Add more properties and real villa photos
 
 ---
 
-*Built by Shivam Keshri as a data engineering portfolio project — April 2026* 
+*Built by Shivam Keshri as a data engineering portfolio project — April 2026*
