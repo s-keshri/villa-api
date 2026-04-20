@@ -2,17 +2,14 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, EmailStr, field_validator
 import re
 import os
-import smtplib
-import threading
-from email.mime.multipart import MIMEMultipart
-from email.mime.text import MIMEText
+import resend
 from typing import Optional
 from datetime import date, datetime
 from app.database import get_connection
 
 router = APIRouter(prefix="/bookings", tags=["Bookings"])
 
-RESEND_API_KEY = os.environ.get("RESEND_API_KEY")
+resend.api_key = os.environ.get("RESEND_API_KEY")
 
 
 class BookingRequest(BaseModel):
@@ -91,6 +88,7 @@ def send_confirmation_email(
         <body style="margin: 0; padding: 0; background-color: #f7f4ef; font-family: Georgia, serif;">
             <div style="max-width: 600px; margin: 40px auto; background: white; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 24px rgba(0,0,0,0.08);">
 
+                <!-- Header -->
                 <div style="background-color: #1c1917; padding: 40px 40px 30px; text-align: center;">
                     <h1 style="margin: 0; color: white; font-size: 28px; letter-spacing: 1px;">
                         Aureo<span style="color: #d97706;">Stays</span>
@@ -100,24 +98,36 @@ def send_confirmation_email(
                     </p>
                 </div>
 
+                <!-- Confirmation Banner -->
                 <div style="background-color: #d97706; padding: 24px 40px; text-align: center;">
                     <p style="margin: 0; color: white; font-size: 20px; font-weight: bold;">
                         🎉 Booking Confirmed!
                     </p>
                 </div>
 
+                <!-- Body -->
                 <div style="padding: 40px;">
-                    <p style="color: #1c1917; font-size: 16px; margin-top: 0;">Dear {guest_name},</p>
+                    <p style="color: #1c1917; font-size: 16px; margin-top: 0;">
+                        Dear {guest_name},
+                    </p>
                     <p style="color: #57534e; font-size: 15px; line-height: 1.7;">
                         Your villa booking is confirmed. We're delighted to host you and look forward to making your stay exceptional.
                     </p>
 
+                    <!-- Booking Reference -->
                     <div style="background-color: #fef3c7; border: 1px solid #fde68a; border-radius: 12px; padding: 20px; text-align: center; margin: 28px 0;">
-                        <p style="margin: 0 0 6px; color: #d97706; font-size: 11px; letter-spacing: 2px; text-transform: uppercase;">Booking Reference</p>
-                        <p style="margin: 0; color: #92400e; font-size: 28px; font-weight: bold; letter-spacing: 1px;">{booking_ref}</p>
-                        <p style="margin: 8px 0 0; color: #a16207; font-size: 12px;">Please save this reference number</p>
+                        <p style="margin: 0 0 6px; color: #d97706; font-size: 11px; letter-spacing: 2px; text-transform: uppercase;">
+                            Booking Reference
+                        </p>
+                        <p style="margin: 0; color: #92400e; font-size: 28px; font-weight: bold; letter-spacing: 1px;">
+                            {booking_ref}
+                        </p>
+                        <p style="margin: 8px 0 0; color: #a16207; font-size: 12px;">
+                            Please save this reference number
+                        </p>
                     </div>
 
+                    <!-- Booking Details -->
                     <h2 style="color: #1c1917; font-size: 16px; margin-bottom: 4px;">Booking Details</h2>
                     <hr style="border: none; border-top: 1px solid #e7e5e4; margin-bottom: 16px;">
 
@@ -153,9 +163,10 @@ def send_confirmation_email(
                         </tr>
                     </table>
 
+                    <!-- Footer note -->
                     <div style="background-color: #f7f4ef; border-radius: 10px; padding: 16px 20px; margin-top: 28px;">
                         <p style="margin: 0; color: #78716c; font-size: 13px; line-height: 1.6;">
-                            📍 Our team will reach out closer to your arrival date with check-in instructions.
+                            📍 Our team will reach out closer to your arrival date with check-in instructions and any additional details.
                             If you have any questions, simply reply to this email.
                         </p>
                     </div>
@@ -166,28 +177,24 @@ def send_confirmation_email(
                     </p>
                 </div>
 
+                <!-- Footer -->
                 <div style="background-color: #1c1917; padding: 20px 40px; text-align: center;">
                     <p style="margin: 0; color: #78716c; font-size: 12px;">
                         © 2026 AureoStays · <a href="https://villa-frontend.vercel.app" style="color: #d97706; text-decoration: none;">villa-frontend.vercel.app</a>
                     </p>
                 </div>
+
             </div>
         </body>
         </html>
         """
 
-        msg = MIMEMultipart("alternative")
-        msg["Subject"] = f"Your booking is confirmed — {property_name} 🎉"
-        msg["From"] = "AureoStays <onboarding@resend.dev>"
-        msg["To"] = guest_email
-        msg.attach(MIMEText(html, "html"))
-
-        with smtplib.SMTP("smtp.resend.com", 587) as server:
-            server.starttls()
-            server.login("resend", RESEND_API_KEY)
-            server.sendmail("onboarding@resend.dev", guest_email, msg.as_string())
-
-        print(f"Confirmation email sent to {guest_email}")
+        resend.Emails.send({
+            "from": "AureoStays <onboarding@resend.dev>",
+            "to": [guest_email],
+            "subject": f"Your booking is confirmed — {property_name} 🎉",
+            "html": html,
+        })
 
     except Exception as e:
         print(f"Email sending failed: {e}")
@@ -258,26 +265,22 @@ def create_booking(payload: BookingRequest):
 
         nights = (payload.checkout_date - payload.checkin_date).days
 
-        email_thread = threading.Thread(
-            target=send_confirmation_email,
-            kwargs=dict(
-                guest_name=payload.guest_name,
-                guest_email=str(payload.guest_email),
-                booking_ref=booking["booking_ref"],
-                property_name=property_name,
-                property_location=property_location,
-                checkin_date=payload.checkin_date,
-                checkout_date=payload.checkout_date,
-                num_nights=nights,
-                num_adults=payload.num_adults,
-                num_kids=payload.num_kids,
-                num_infants=payload.num_infants,
-                total_amount=float(booking["total_amount"]),
-                special_requests=payload.special_requests,
-            )
+        # Send confirmation email (non-blocking — failure won't affect booking)
+        send_confirmation_email(
+            guest_name=payload.guest_name,
+            guest_email=str(payload.guest_email),
+            booking_ref=booking["booking_ref"],
+            property_name=property_name,
+            property_location=property_location,
+            checkin_date=payload.checkin_date,
+            checkout_date=payload.checkout_date,
+            num_nights=nights,
+            num_adults=payload.num_adults,
+            num_kids=payload.num_kids,
+            num_infants=payload.num_infants,
+            total_amount=float(booking["total_amount"]),
+            special_requests=payload.special_requests,
         )
-        email_thread.daemon = True
-        email_thread.start()
 
         return {
             "success": True,
