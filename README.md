@@ -72,6 +72,7 @@ Most data engineering portfolios show pipelines built on CSV files and Jupyter n
 | Frontend Hosting | Vercel |
 | API Hosting | Railway |
 | Analytics | Metabase |
+| Email | Resend | Transactional email API |
 
 ---
 
@@ -117,6 +118,7 @@ When a guest clicks **Confirm Booking**, a single API call triggers this sequenc
 6. INSERT booking row with snapshotted price
 7. UPDATE inventory → set is_available = FALSE for all booked dates
 8. COMMIT
+9. Send HTML confirmation email to guest via Resend
 
 If any step fails → ROLLBACK (no partial writes)
 ```
@@ -264,6 +266,8 @@ villa-frontend/
 - Deploy Metabase to Render for a publicly shareable analytics dashboard
 - Add a `/dashboard` page to the frontend showing live booking analytics
 - Migrate API from Railway to Render when trial ends (free forever)
+- Deploy Metabase to Render for a publicly shareable analytics dashboard
+- Add a /dashboard page to the frontend showing live booking analytics
 - Add more properties and real villa photos
 
 ---
