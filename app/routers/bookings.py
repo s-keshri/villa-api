@@ -2,14 +2,17 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, EmailStr, field_validator
 import re
 import os
-import resend
+import smtplib
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
 from typing import Optional
 from datetime import date, datetime
 from app.database import get_connection
 
 router = APIRouter(prefix="/bookings", tags=["Bookings"])
 
-resend.api_key = os.environ.get("RESEND_API_KEY")
+GMAIL_USER = os.environ.get("GMAIL_USER")
+GMAIL_APP_PASSWORD = os.environ.get("GMAIL_APP_PASSWORD")
 
 
 class BookingRequest(BaseModel):
@@ -189,12 +192,17 @@ def send_confirmation_email(
         </html>
         """
 
-        resend.Emails.send({
-            "from": "AureoStays <onboarding@resend.dev>",
-            "to": [guest_email],
-            "subject": f"Your booking is confirmed — {property_name} 🎉",
-            "html": html,
-        })
+        msg = MIMEMultipart("alternative")
+        msg["Subject"] = f"Your booking is confirmed — {property_name} 🎉"
+        msg["From"] = f"AureoStays <{GMAIL_USER}>"
+        msg["To"] = guest_email
+        msg.attach(MIMEText(html, "html"))
+
+        with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
+            server.login(GMAIL_USER, GMAIL_APP_PASSWORD)
+            server.sendmail(GMAIL_USER, guest_email, msg.as_string())
+
+        print(f"Confirmation email sent to {guest_email}")
 
     except Exception as e:
         print(f"Email sending failed: {e}")
@@ -265,7 +273,6 @@ def create_booking(payload: BookingRequest):
 
         nights = (payload.checkout_date - payload.checkin_date).days
 
-        # Send confirmation email (non-blocking — failure won't affect booking)
         send_confirmation_email(
             guest_name=payload.guest_name,
             guest_email=str(payload.guest_email),
