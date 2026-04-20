@@ -307,17 +307,21 @@ def list_bookings():
     try:
         cur = conn.cursor()
         cur.execute("""
-            SELECT b.id, b.booking_ref,
-                p.name AS property_name, p.location AS property_location,
-                g.full_name AS guest_name, g.email AS guest_email, g.phone AS guest_phone,
-                b.checkin_date, b.checkout_date, b.num_nights,
-                b.num_adults, b.num_kids, b.num_infants, b.total_guests,
-                b.price_per_night, b.total_amount, b.status, b.special_requests, b.created_at
-            FROM bookings b
-            JOIN properties p ON p.id = b.property_id
-            JOIN guests g ON g.id = b.guest_id
-            ORDER BY b.created_at DESC
-        """)
+    SELECT b.id, b.booking_ref,
+        p.name AS property_name, p.location AS property_location,
+        g.full_name AS guest_name, g.email AS guest_email, g.phone AS guest_phone,
+        b.checkin_date, b.checkout_date,
+        (b.checkout_date - b.checkin_date) AS num_nights,
+        b.num_adults, b.num_kids, b.num_infants,
+        (b.num_adults + b.num_kids) AS total_guests,
+        b.price_per_night,
+        ((b.checkout_date - b.checkin_date) * b.price_per_night) AS total_amount,
+        b.status, b.special_requests, b.created_at
+    FROM bookings b
+    JOIN properties p ON p.id = b.property_id
+    JOIN guests g ON g.id = b.guest_id
+    ORDER BY b.created_at DESC
+""")
         return cur.fetchall()
     finally:
         conn.close()
