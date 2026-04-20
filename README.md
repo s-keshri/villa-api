@@ -266,8 +266,6 @@ villa-frontend/
 - Deploy Metabase to Render for a publicly shareable analytics dashboard
 - Add a `/dashboard` page to the frontend showing live booking analytics
 - Migrate API from Railway to Render when trial ends (free forever)
-- Deploy Metabase to Render for a publicly shareable analytics dashboard
-- Add a /dashboard page to the frontend showing live booking analytics
 - Add more properties and real villa photos
 
 ---
