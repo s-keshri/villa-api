@@ -3,7 +3,7 @@
 A production-grade villa booking platform built as a **data engineering portfolio project**. Every guest interaction like browsing properties, selecting dates, entering details, confirming a booking flows through a real ETL pipeline into a structured PostgreSQL database that is queryable in real time.
 
 **Live Site**: [villa-frontend.vercel.app](https://villa-frontend.vercel.app)  
-**Live API**: [villa-api-production-f7b1.up.railway.app/docs](https://villa-api-production-f7b1.up.railway.app/docs)
+**Live API**: [aureo-stays-api.onrender.com/docs](https://aureo-stays-api.onrender.com/docs)
 
 ---
 
@@ -31,8 +31,8 @@ Most data engineering portfolios show pipelines built on CSV files and Jupyter n
                       ▼
 ┌─────────────────────────────────────────────────────────────┐
 │                      BACKEND API                            │
-│        villa-api-production-f7b1.up.railway.app             │
-│              FastAPI (Python 3.13)                          │
+│              aureo-stays-api.onrender.com                   │
+│              FastAPI (Python 3.11)                          │
 │                                                             │
 │  • Validates availability (inventory table)                 │
 │  • Upserts guest record                                     │
@@ -40,7 +40,7 @@ Most data engineering portfolios show pipelines built on CSV files and Jupyter n
 │  • Blocks inventory dates                                   │
 │  • Sends HTML confirmation email via Resend                 │
 └──────────┬──────────────────────────┬───────────────────────┘
-           │  PostgreSQL (asyncpg)    │  Resend API
+           │  PostgreSQL (psycopg)    │  Resend API
            ▼                          ▼
 ┌─────────────────────┐   ┌──────────────────────────────────┐
 │      DATABASE       │   │         GUEST'S INBOX            │
@@ -71,8 +71,8 @@ Most data engineering portfolios show pipelines built on CSV files and Jupyter n
 | Layer | Technology | Notes |
 |---|---|---|
 | Frontend | Next.js 15, Tailwind CSS, TypeScript | Deployed on Vercel |
-| Backend | FastAPI, Python 3.13, Pydantic v2 | Deployed on Railway |
-| Database | PostgreSQL 15, asyncpg | Hosted on Supabase |
+| Backend | FastAPI, Python 3.11, Pydantic v2 | Deployed on Render |
+| Database | PostgreSQL 15, psycopg | Hosted on Supabase |
 | Email | Resend | Transactional HTML emails |
 | Analytics | Metabase | Connected to live Supabase DB |
 
@@ -155,7 +155,7 @@ Email failure (step 9) never affects the booking — it is non-blocking
 | POST | `/bookings/` | Create a booking (full ETL + email) |
 | GET | `/bookings` | Admin — all bookings with guest & property data |
 
-Full interactive docs: [villa-api-production-f7b1.up.railway.app/docs](https://villa-api-production-f7b1.up.railway.app/docs)
+Full interactive docs: [aureo-stays-api.onrender.com/docs](https://aureo-stays-api.onrender.com/docs)
 
 ---
 
@@ -213,7 +213,7 @@ ORDER BY occupancy_pct DESC;
 
 ## Running Locally
 
-**Prerequisites:** Python 3.10+, Node.js 18+, a Supabase project, a Resend account
+**Prerequisites:** Python 3.11+, Node.js 18+, a Supabase project, a Resend account
 
 **Backend:**
 ```bash
@@ -247,11 +247,12 @@ Run `schema.sql` in your Supabase SQL Editor. This creates all 4 tables, indexes
 villa-api/
 ├── app/
 │   ├── main.py           # FastAPI app, CORS config
-│   ├── database.py       # asyncpg connection pool
+│   ├── database.py       # psycopg connection pool
 │   └── routers/
 │       ├── properties.py # GET /properties endpoints
 │       └── bookings.py   # POST /bookings/ — ETL core + email
-├── Procfile              # Railway start command
+├── Procfile              # Render start command
+├── .python-version       # Pins Python 3.11 for Render
 ├── requirements.txt
 └── .env.example
 
@@ -268,7 +269,7 @@ villa-frontend/
 
 ## Key Engineering Decisions
 
-**Why raw SQL over an ORM?** Direct asyncpg queries give full control over transactions. ORMs abstract away the exact SQL that runs — for a data engineering project, that's the wrong tradeoff.
+**Why raw SQL over an ORM?** Direct psycopg queries give full control over transactions. ORMs abstract away the exact SQL that runs — for a data engineering project, that's the wrong tradeoff.
 
 **Why snapshot price at booking time?** Revenue queries need to reflect what guests actually paid. If a villa's price changes next week, historical bookings should not be affected.
 
@@ -282,11 +283,9 @@ villa-frontend/
 
 ## What's Next
 
-- Deploy Metabase to Render for a publicly shareable analytics dashboard
-- Add a `/dashboard` page to the frontend showing live booking analytics
-- Migrate API from Railway to Render when trial ends (free forever)
 - Verify a custom domain on Resend to send confirmation emails to all guests
 - Add more properties and real villa photos
+- Deploy Metabase to Render for a publicly shareable analytics dashboard
 
 ---
 
