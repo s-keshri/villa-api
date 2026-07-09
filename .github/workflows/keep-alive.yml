@@ -1,0 +1,18 @@
+name: Keep Alive
+
+on:
+  schedule:
+    - cron: '0 */6 * * *'
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping API health check
+        run: |
+          curl -f https://aureo-stays-api.onrender.com/ || echo "Health check failed"
+
+      - name: Ping properties endpoint (touches the DB)
+        run: |
+          curl -f https://aureo-stays-api.onrender.com/properties/ || echo "Properties check failed"
