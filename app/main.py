@@ -20,6 +20,6 @@ app.include_router(properties.router)
 app.include_router(bookings.router)
 
 
-@app.get("/")
+@app.api_route("/", methods=["GET", "HEAD"])
 def root():
     return {"status": "ok", "message": "Villa Booking API is running"}
